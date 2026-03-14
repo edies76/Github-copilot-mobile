@@ -106,7 +106,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Card(
                   elevation: 0,
                   child: SwitchListTile(
-                    leading: const Icon(Icons.dark_mode),
                     title: const Text('Dark Mode'),
                     value: _darkMode,
                     onChanged: (value) {
@@ -119,7 +118,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Card(
                   elevation: 0,
                   child: SwitchListTile(
-                    leading: const Icon(Icons.notifications),
                     title: const Text('Notifications'),
                     value: _notifications,
                     onChanged: (value) {
