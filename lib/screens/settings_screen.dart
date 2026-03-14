@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,39 +23,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       body: ListView(
         children: [
-          // Account Section
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Account',
-                  style: Theme.of(context).textTheme.titleLarge,
+          // User Profile Section
+          Consumer<AuthProvider>(
+            builder: (context, authProvider, _) {
+              final user = authProvider.currentUser;
+              return Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Account',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      elevation: 0,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Row(
+                          children: [
+                            if (user?.avatarUrl != null)
+                              CircleAvatar(
+                                backgroundImage: NetworkImage(user!.avatarUrl!),
+                                radius: 32,
+                              )
+                            else
+                              CircleAvatar(
+                                radius: 32,
+                                child: Icon(
+                                  Icons.person,
+                                  size: 32,
+                                ),
+                              ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user?.name ?? 'User',
+                                    style: Theme.of(context).textTheme.titleMedium,
+                                  ),
+                                  Text(
+                                    '@${user?.login ?? 'username'}',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  if (user?.bio != null)
+                                    Text(
+                                      user!.bio!,
+                                      style: Theme.of(context).textTheme.labelSmall,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                Card(
-                  elevation: 0,
-                  child: ListTile(
-                    leading: const Icon(Icons.person),
-                    title: const Text('GitHub Account'),
-                    subtitle: const Text('Not connected'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {},
-                  ),
-                ),
-                Card(
-                  elevation: 0,
-                  child: ListTile(
-                    leading: const Icon(Icons.key),
-                    title: const Text('API Key'),
-                    subtitle: const Text('Configure your API key'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {},
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
           const Divider(),
 
@@ -136,7 +171,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     leading: const Icon(Icons.description),
                     title: const Text('Terms of Service'),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {},
+                    onTap: () {
+                      _showTermsDialog();
+                    },
                   ),
                 ),
                 Card(
@@ -145,7 +182,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     leading: const Icon(Icons.privacy_tip),
                     title: const Text('Privacy Policy'),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {},
+                    onTap: () {
+                      _showPrivacyDialog();
+                    },
+                  ),
+                ),
+                Card(
+                  elevation: 0,
+                  child: ListTile(
+                    leading: const Icon(Icons.bug_report),
+                    title: const Text('Report Bug'),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Bug report feature coming soon')),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -199,6 +251,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _showTermsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Terms of Service'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'By using GitHub Copilot Mobile, you agree to our terms of service. '
+            'This application is provided as-is for educational and development purposes. '
+            'Users are responsible for their own use of the application and any content generated.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPrivacyDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Privacy Policy'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'We respect your privacy. Your GitHub token is stored securely on your device. '
+            'We do not collect or share your personal data with third parties. '
+            'All conversations are stored locally on your device.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -212,10 +308,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () {
+              context.read<AuthProvider>().logout();
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Logged out successfully')),
-              );
+              Navigator.of(context).pushReplacementNamed('/');
             },
             child: const Text('Logout'),
           ),
