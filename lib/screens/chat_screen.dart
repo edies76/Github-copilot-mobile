@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/chat_provider.dart';
+import '../models/chat_message.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -9,41 +12,19 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final List<ChatMessage> _messages = [
-    ChatMessage(
-      text: 'Hello! I\'m GitHub Copilot. How can I help you with your code today?',
-      isUser: false,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-    ),
-  ];
+  final ScrollController _scrollController = ScrollController();
 
-  void _sendMessage() {
-    if (_messageController.text.isEmpty) return;
+  @override
+  void initState() {
+    super.initState();
+    _initializeChat();
+  }
 
-    setState(() {
-      _messages.add(
-        ChatMessage(
-          text: _messageController.text,
-          isUser: true,
-          timestamp: DateTime.now(),
-        ),
-      );
-    });
-
-    _messageController.clear();
-
-    // Simulate AI response
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        setState(() {
-          _messages.add(
-            ChatMessage(
-              text: 'This is a simulated response. In production, this would be powered by GitHub Copilot API.',
-              isUser: false,
-              timestamp: DateTime.now(),
-            ),
-          );
-        });
+  void _initializeChat() {
+    Future.microtask(() {
+      final chatProvider = context.read<ChatProvider>();
+      if (chatProvider.currentConversationId.isEmpty) {
+        chatProvider.startNewConversation('New Conversation');
       }
     });
   }
@@ -51,7 +32,30 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _messageController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _sendMessage() {
+    if (_messageController.text.isEmpty) return;
+
+    final message = _messageController.text;
+    _messageController.clear();
+
+    context.read<ChatProvider>().sendMessage(message);
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   @override
@@ -60,19 +64,98 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: const Text('Chat with Copilot'),
         elevation: 0,
+        actions: [
+          PopupMenuButton(
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                child: const Text('New Conversation'),
+                onTap: () {
+                  context.read<ChatProvider>().startNewConversation('New Chat');
+                },
+              ),
+              PopupMenuItem(
+                child: const Text('Clear History'),
+                onTap: () {
+                  _showClearHistoryDialog();
+                },
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              reverse: true,
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[_messages.length - 1 - index];
-                return _ChatBubble(message: message);
+            child: Consumer<ChatProvider>(
+              builder: (context, chatProvider, _) {
+                if (chatProvider.messages.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Start a conversation',
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Ask Copilot for code suggestions, debugging help, and more',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(12.0),
+                  itemCount: chatProvider.messages.length,
+                  itemBuilder: (context, index) {
+                    final message = chatProvider.messages[index];
+                    return _ChatBubble(message: message);
+                  },
+                );
               },
             ),
           ),
+          
+          // Loading indicator
+          Consumer<ChatProvider>(
+            builder: (context, chatProvider, _) {
+              if (chatProvider.isLoading) {
+                return Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Copilot is thinking...',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          
+          // Input area
           Container(
             padding: const EdgeInsets.all(12.0),
             decoration: BoxDecoration(
@@ -96,6 +179,23 @@ class _ChatScreenState extends State<ChatScreen> {
                         horizontal: 16,
                         vertical: 12,
                       ),
+                      suffixIcon: PopupMenuButton(
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            child: const Text('Debug Code'),
+                            onTap: () {
+                              _showDebugCodeDialog();
+                            },
+                          ),
+                          PopupMenuItem(
+                            child: const Text('Generate Docs'),
+                            onTap: () {
+                              _messageController.text = 'Generate documentation for: ';
+                            },
+                          ),
+                        ],
+                        child: const Icon(Icons.more_vert),
+                      ),
                     ),
                     maxLines: null,
                     textInputAction: TextInputAction.send,
@@ -115,29 +215,75 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
-}
 
-class ChatMessage {
-  final String text;
-  final bool isUser;
-  final DateTime timestamp;
+  void _showDebugCodeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final codeController = TextEditingController();
+        return AlertDialog(
+          title: const Text('Debug Code'),
+          content: TextField(
+            controller: codeController,
+            maxLines: 8,
+            decoration: const InputDecoration(
+              hintText: 'Paste your code here',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (codeController.text.isNotEmpty) {
+                  context.read<ChatProvider>().debugCode(codeController.text);
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Debug'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-  ChatMessage({
-    required this.text,
-    required this.isUser,
-    required this.timestamp,
-  });
+  void _showClearHistoryDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear History'),
+        content: const Text('Are you sure you want to clear the chat history?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<ChatProvider>().startNewConversation('New Conversation');
+              Navigator.pop(context);
+            },
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ChatBubble extends StatelessWidget {
-  final ChatMessage message;
+  final ChatMessageModel message;
 
   const _ChatBubble({required this.message});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
       child: Align(
         alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -154,8 +300,8 @@ class _ChatBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                message.text,
+              SelectableText(
+                message.content,
                 style: TextStyle(
                   color: message.isUser
                       ? Colors.white

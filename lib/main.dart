@@ -1,15 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/login_screen.dart';
+import 'providers/auth_provider.dart';
+import 'providers/chat_provider.dart';
 
 void main() {
-  runApp(const GitHubCopilotMobileApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
+      ],
+      child: const GitHubCopilotMobileApp(),
+    ),
+  );
 }
 
-class GitHubCopilotMobileApp extends StatelessWidget {
+class GitHubCopilotMobileApp extends StatefulWidget {
   const GitHubCopilotMobileApp({super.key});
+
+  @override
+  State<GitHubCopilotMobileApp> createState() => _GitHubCopilotMobileAppState();
+}
+
+class _GitHubCopilotMobileAppState extends State<GitHubCopilotMobileApp> {
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthStatus();
+  }
+
+  void _checkAuthStatus() {
+    Future.microtask(() {
+      context.read<AuthProvider>().checkAuthStatus();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +63,23 @@ class GitHubCopilotMobileApp extends StatelessWidget {
         ),
       ),
       themeMode: ThemeMode.system,
-      home: const MainNavigationScreen(),
+      home: Consumer<AuthProvider>(
+        builder: (context, authProvider, _) {
+          if (authProvider.isLoading) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+
+          if (authProvider.isAuthenticated) {
+            return const MainNavigationScreen();
+          } else {
+            return const LoginScreen();
+          }
+        },
+      ),
     );
   }
 }
